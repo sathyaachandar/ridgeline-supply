@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ridgeline Supply</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Instrument+Sans:wght@400;600&display=swap" rel="stylesheet">
+
+<!-- ===== DATA 360 WEB SDK =====
+     After you create the Website connector in Data 360, paste its <script> snippet here. -->
+<!-- <script src="https://YOUR-TENANT.c360a.salesforce.com/web-sdk/v1/YOUR-ID.js" async></script> -->
+
+<style>
+:root{--bg:#f2f4ef;--ink:#13233a;--muted:#5b6b7f;--line:#d3dacf;--accent:#2457ff;--warm:#ffd23f;--card:#fff}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:"Instrument Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+h1,h2,h3{font-family:"Bricolage Grotesque","Instrument Sans",sans-serif;margin:0;letter-spacing:-.02em}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+header{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:18px 5vw;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.brand{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:1.4rem}
+.id-box{display:flex;gap:8px;align-items:center}
+.id-box input{padding:9px 12px;border:1px solid var(--line);border-radius:8px;min-width:230px;font:inherit;background:var(--card)}
+button{font:inherit;cursor:pointer;border:0;border-radius:8px;padding:9px 16px;background:var(--ink);color:#fff;font-weight:600}
+button.alt{background:var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.hero{padding:44px 5vw 20px;max-width:900px}
+.hero h1{font-size:clamp(2rem,5vw,3.4rem);font-weight:800;line-height:1.05}
+.hero p{color:var(--muted);max-width:52ch;margin:12px 0 0}
+.layout{display:grid;grid-template-columns:1fr 340px;gap:28px;padding:20px 5vw 60px;align-items:start}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
+.thumb{height:130px;display:grid;place-items:center;font-size:3.2rem;cursor:pointer}
+.card .body{padding:14px;display:flex;flex-direction:column;gap:6px;flex:1}
+.card h3{font-size:1.05rem;font-weight:600}
+.cat{color:var(--muted);font-size:.85rem}
+.price{font-weight:600}
+.card .row{display:flex;justify-content:space-between;align-items:center;margin-top:auto}
+aside{position:sticky;top:16px;display:grid;gap:18px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.panel h2{font-size:1.1rem;margin-bottom:10px}
+.cart-line{display:flex;justify-content:space-between;font-size:.95rem;padding:4px 0}
+.empty{color:var(--muted);font-size:.92rem}
+.total{display:flex;justify-content:space-between;font-weight:600;border-top:1px solid var(--line);margin-top:8px;padding-top:8px}
+#feed{font-family:ui-monospace,Menlo,monospace;font-size:.78rem;background:var(--ink);color:#dfe8f5;border-radius:10px;padding:10px;height:210px;overflow:auto;white-space:pre-wrap}
+#feed .ev{color:var(--warm)}
+#feed .sent{color:#7be0a3}
+.status{font-size:.82rem;color:var(--muted);margin-top:8px}
+@media(max-width:860px){.layout{grid-template-columns:1fr}aside{position:static}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Ridgeline Supply</div>
+  <form class="id-box" id="idForm">
+    <input id="email" type="email" placeholder="Your email to sign in" aria-label="Email address" required>
+    <button type="submit" class="alt">Sign in</button>
+  </form>
+</header>
+
+<section class="hero">
+  <h1>Gear for the miles you haven’t run yet.</h1>
+  <p>Six everyday pieces, shipped fast. Sign in with your email so your orders and support history stay together.</p>
+</section>
+
+<div class="layout">
+  <main>
+    <div class="grid" id="grid"></div>
+  </main>
+  <aside>
+    <div class="panel">
+      <h2>Your cart</h2>
+      <div id="cart"><p class="empty">Your cart is empty. Add a product to start.</p></div>
+      <div class="total"><span>Total</span><span id="total">$0.00</span></div>
+      <button id="checkout" class="alt" style="width:100%;margin-top:12px" disabled>Start checkout</button>
+      <p class="status" id="msg"></p>
+    </div>
+    <div class="panel">
+      <h2>Events sent to Data 360</h2>
+      <div id="feed" aria-live="polite"></div>
+      <p class="status" id="sdk"></p>
+    </div>
+  </aside>
+</div>
+
+<script>
+const PRODUCTS=[
+ {id:"P001",name:"Wireless Earbuds",cat:"Electronics",price:49.99,icon:"🎧",bg:"#dbe6ff"},
+ {id:"P002",name:"Smart Watch",cat:"Electronics",price:129.00,icon:"⌚",bg:"#ffe9a8"},
+ {id:"P003",name:"Running Shoes",cat:"Footwear",price:79.50,icon:"👟",bg:"#d4f0dd"},
+ {id:"P004",name:"Backpack",cat:"Accessories",price:39.99,icon:"🎒",bg:"#f9d6d0"},
+ {id:"P005",name:"Water Bottle",cat:"Accessories",price:14.99,icon:"💧",bg:"#d6eef5"},
+ {id:"P006",name:"Yoga Mat",cat:"Fitness",price:24.50,icon:"🧘",bg:"#e6dcf5"}
+];
+const cart={};let email=null;
+const $=s=>document.querySelector(s);
+const money=n=>"$"+n.toFixed(2);
+
+/* ---- Event layer: one place that talks to Data 360 ---- */
+function track(name,data){
+  const payload={name,data,ts:new Date().toISOString(),email};
+  const f=$("#feed");
+  const sdk=window.SalesforceInteractions;
+  let sent=false;
+  try{
+    if(sdk&&sdk.sendEvent){
+      // Event shape is aligned to the schema we define in the Website connector.
+      sdk.sendEvent({interaction:{name,...data},user:email?{attributes:{email}}:undefined});
+      sent=true;
+    }
+  }catch(e){console.warn("Web SDK error",e)}
+  f.insertAdjacentHTML("beforeend",`<div><span class="ev">${name}</span> ${JSON.stringify(data)} <span class="${sent?"sent":""}">${sent?"sent":"logged only"}</span></div>`);
+  f.scrollTop=f.scrollHeight;
+}
+
+function render(){
+  $("#grid").innerHTML=PRODUCTS.map(p=>`
+    <article class="card">
+      <div class="thumb" style="background:${p.bg}" data-view="${p.id}" role="button" tabindex="0" aria-label="View ${p.name}">${p.icon}</div>
+      <div class="body">
+        <h3>${p.name}</h3><div class="cat">${p.cat}</div>
+        <div class="row"><span class="price">${money(p.price)}</span><button data-add="${p.id}">Add to cart</button></div>
+      </div>
+    </article>`).join("");
+  const ids=Object.keys(cart);
+  $("#cart").innerHTML=ids.length?ids.map(id=>{const p=PRODUCTS.find(x=>x.id===id);return `<div class="cart-line"><span>${p.name} × ${cart[id]}</span><span>${money(p.price*cart[id])}</span></div>`}).join(""):'<p class="empty">Your cart is empty. Add a product to start.</p>';
+  const total=ids.reduce((s,id)=>s+PRODUCTS.find(x=>x.id===id).price*cart[id],0);
+  $("#total").textContent=money(total);
+  $("#checkout").disabled=!ids.length;
+}
+
+document.addEventListener("click",e=>{
+  const v=e.target.closest("[data-view]"),a=e.target.closest("[data-add]");
+  if(v){const p=PRODUCTS.find(x=>x.id===v.dataset.view);track("product_view",{productId:p.id,productName:p.name,price:p.price})}
+  if(a){const p=PRODUCTS.find(x=>x.id===a.dataset.add);cart[p.id]=(cart[p.id]||0)+1;track("add_to_cart",{productId:p.id,productName:p.name,price:p.price,quantity:cart[p.id]});render()}
+});
+document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.dataset&&e.target.dataset.view)e.target.click()});
+
+$("#idForm").addEventListener("submit",e=>{
+  e.preventDefault();
+  email=$("#email").value.trim().toLowerCase();
+  try{sessionStorage.setItem("rs_email",email)}catch(_){}
+  $("#msg").textContent="Signed in as "+email+".";
+  track("identify",{email});
+});
+
+$("#checkout").addEventListener("click",()=>{
+  const ids=Object.keys(cart);
+  const total=ids.reduce((s,id)=>s+PRODUCTS.find(x=>x.id===id).price*cart[id],0);
+  if(!email){$("#msg").textContent="Sign in with your email first so we can link this checkout to your account.";return}
+  track("checkout_start",{items:ids.map(id=>({productId:id,quantity:cart[id]})),cartTotal:+total.toFixed(2)});
+  $("#msg").textContent="Checkout started. This demo stops here.";
+});
+
+try{const s=sessionStorage.getItem("rs_email");if(s){email=s;$("#email").value=s;$("#msg").textContent="Signed in as "+s+"."}}catch(_){}
+render();
+track("page_view",{page:location.pathname||"/"});
+setTimeout(()=>{$("#sdk").textContent=window.SalesforceInteractions?"Data 360 Web SDK detected.":"Web SDK not loaded yet. Events are logged here only."},800);
+</script>
+</body>
+</html>
