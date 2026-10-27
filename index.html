@@ -8,9 +8,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Instrument+Sans:wght@400;600&display=swap" rel="stylesheet">
 
-<!-- ===== DATA 360 WEB SDK =====
-     After you create the Website connector in Data 360, paste its <script> snippet here. -->
-<!-- <script src="https://YOUR-TENANT.c360a.salesforce.com/web-sdk/v1/YOUR-ID.js" async></script> -->
+<!-- Data 360 Web SDK: loads after the page so the consent buttons exist when it starts -->
+<script src="https://cdn.c360a.salesforce.com/beacon/c360a/54696fd3-c9b6-4f66-a944-43375b25dec4/scripts/c360a.min.js" defer></script>
 
 <style>
 :root{--bg:#f2f4ef;--ink:#13233a;--muted:#5b6b7f;--line:#d3dacf;--accent:#2457ff;--warm:#ffd23f;--card:#fff}
@@ -18,14 +17,17 @@
 html,body{margin:0}
 body{font-family:"Instrument Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
 h1,h2,h3{font-family:"Bricolage Grotesque","Instrument Sans",sans-serif;margin:0;letter-spacing:-.02em}
-a:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+a:focus-visible,button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 header{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:18px 5vw;border-bottom:1px solid var(--line);flex-wrap:wrap}
 .brand{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:1.4rem}
 .id-box{display:flex;gap:8px;align-items:center}
 .id-box input{padding:9px 12px;border:1px solid var(--line);border-radius:8px;min-width:230px;font:inherit;background:var(--card)}
 button{font:inherit;cursor:pointer;border:0;border-radius:8px;padding:9px 16px;background:var(--ink);color:#fff;font-weight:600}
 button.alt{background:var(--accent)}
+button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
 button:disabled{opacity:.45;cursor:not-allowed}
+#consent{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--ink);color:#fff;padding:12px 5vw;font-size:.92rem}
+#consent button.ghost{color:#fff;border-color:#5b6b7f}
 .hero{padding:44px 5vw 20px;max-width:900px}
 .hero h1{font-size:clamp(2rem,5vw,3.4rem);font-weight:800;line-height:1.05}
 .hero p{color:var(--muted);max-width:52ch;margin:12px 0 0}
@@ -49,10 +51,14 @@ aside{position:sticky;top:16px;display:grid;gap:18px}
 #feed .sent{color:#7be0a3}
 .status{font-size:.82rem;color:var(--muted);margin-top:8px}
 @media(max-width:860px){.layout{grid-template-columns:1fr}aside{position:static}}
-@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
 </style>
 </head>
 <body>
+<div id="consent" role="region" aria-label="Tracking consent">
+  <span>We use analytics to understand how the store is used. Allow tracking?</span>
+  <span><button id="opt-in" class="alt">Allow</button> <button id="opt-out" class="ghost">Decline</button></span>
+</div>
+
 <header>
   <div class="brand">Ridgeline Supply</div>
   <form class="id-box" id="idForm">
@@ -67,15 +73,13 @@ aside{position:sticky;top:16px;display:grid;gap:18px}
 </section>
 
 <div class="layout">
-  <main>
-    <div class="grid" id="grid"></div>
-  </main>
+  <main><div class="grid" id="grid"></div></main>
   <aside>
     <div class="panel">
       <h2>Your cart</h2>
       <div id="cart"><p class="empty">Your cart is empty. Add a product to start.</p></div>
       <div class="total"><span>Total</span><span id="total">$0.00</span></div>
-      <button id="checkout" class="alt" style="width:100%;margin-top:12px" disabled>Start checkout</button>
+      <button id="checkout" class="alt place-order" style="width:100%;margin-top:12px" disabled>Place order</button>
       <p class="status" id="msg"></p>
     </div>
     <div class="panel">
@@ -95,37 +99,29 @@ const PRODUCTS=[
  {id:"P005",name:"Water Bottle",cat:"Accessories",price:14.99,icon:"💧",bg:"#d6eef5"},
  {id:"P006",name:"Yoga Mat",cat:"Fitness",price:24.50,icon:"🧘",bg:"#e6dcf5"}
 ];
-const cart={};let email=null;
+// The Data 360 sitemap (uploaded to the connector) reads this object and sends the events.
+window.RS={products:PRODUCTS,cart:{},email:null};
 const $=s=>document.querySelector(s);
 const money=n=>"$"+n.toFixed(2);
 
-/* ---- Event layer: one place that talks to Data 360 ---- */
-function track(name,data){
-  const payload={name,data,ts:new Date().toISOString(),email};
+function log(name,data,sent){
   const f=$("#feed");
-  const sdk=window.SalesforceInteractions;
-  let sent=false;
-  try{
-    if(sdk&&sdk.sendEvent){
-      // Event shape is aligned to the schema we define in the Website connector.
-      sdk.sendEvent({interaction:{name,...data},user:email?{attributes:{email}}:undefined});
-      sent=true;
-    }
-  }catch(e){console.warn("Web SDK error",e)}
-  f.insertAdjacentHTML("beforeend",`<div><span class="ev">${name}</span> ${JSON.stringify(data)} <span class="${sent?"sent":""}">${sent?"sent":"logged only"}</span></div>`);
+  f.insertAdjacentHTML("beforeend",`<div><span class="ev">${name}</span> ${JSON.stringify(data||{})} <span class="${sent?"sent":""}">${sent?"sent to Data 360":"page action"}</span></div>`);
   f.scrollTop=f.scrollHeight;
 }
+// The sitemap fires this right after every successful sendEvent.
+document.addEventListener("rs:sent",e=>log(e.detail.name,e.detail.data,true));
 
 function render(){
   $("#grid").innerHTML=PRODUCTS.map(p=>`
     <article class="card">
-      <div class="thumb" style="background:${p.bg}" data-view="${p.id}" role="button" tabindex="0" aria-label="View ${p.name}">${p.icon}</div>
+      <div class="thumb product-view" style="background:${p.bg}" data-id="${p.id}" role="button" tabindex="0" aria-label="View ${p.name}">${p.icon}</div>
       <div class="body">
         <h3>${p.name}</h3><div class="cat">${p.cat}</div>
-        <div class="row"><span class="price">${money(p.price)}</span><button data-add="${p.id}">Add to cart</button></div>
+        <div class="row"><span class="price">${money(p.price)}</span><button class="add-to-cart" data-id="${p.id}" data-price="${p.price}">Add to cart</button></div>
       </div>
     </article>`).join("");
-  const ids=Object.keys(cart);
+  const cart=RS.cart,ids=Object.keys(cart);
   $("#cart").innerHTML=ids.length?ids.map(id=>{const p=PRODUCTS.find(x=>x.id===id);return `<div class="cart-line"><span>${p.name} × ${cart[id]}</span><span>${money(p.price*cart[id])}</span></div>`}).join(""):'<p class="empty">Your cart is empty. Add a product to start.</p>';
   const total=ids.reduce((s,id)=>s+PRODUCTS.find(x=>x.id===id).price*cart[id],0);
   $("#total").textContent=money(total);
@@ -133,32 +129,33 @@ function render(){
 }
 
 document.addEventListener("click",e=>{
-  const v=e.target.closest("[data-view]"),a=e.target.closest("[data-add]");
-  if(v){const p=PRODUCTS.find(x=>x.id===v.dataset.view);track("product_view",{productId:p.id,productName:p.name,price:p.price})}
-  if(a){const p=PRODUCTS.find(x=>x.id===a.dataset.add);cart[p.id]=(cart[p.id]||0)+1;track("add_to_cart",{productId:p.id,productName:p.name,price:p.price,quantity:cart[p.id]});render()}
+  const a=e.target.closest(".add-to-cart");
+  if(a){RS.cart[a.dataset.id]=(RS.cart[a.dataset.id]||0)+1;render()}
 });
-document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.dataset&&e.target.dataset.view)e.target.click()});
+document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.classList&&e.target.classList.contains("product-view"))e.target.click()});
 
 $("#idForm").addEventListener("submit",e=>{
   e.preventDefault();
-  email=$("#email").value.trim().toLowerCase();
-  try{sessionStorage.setItem("rs_email",email)}catch(_){}
-  $("#msg").textContent="Signed in as "+email+".";
-  track("identify",{email});
+  RS.email=$("#email").value.trim().toLowerCase();
+  try{sessionStorage.setItem("rs_email",RS.email)}catch(_){}
+  $("#msg").textContent="Signed in as "+RS.email+".";
 });
 
 $("#checkout").addEventListener("click",()=>{
-  const ids=Object.keys(cart);
-  const total=ids.reduce((s,id)=>s+PRODUCTS.find(x=>x.id===id).price*cart[id],0);
-  if(!email){$("#msg").textContent="Sign in with your email first so we can link this checkout to your account.";return}
-  track("checkout_start",{items:ids.map(id=>({productId:id,quantity:cart[id]})),cartTotal:+total.toFixed(2)});
-  $("#msg").textContent="Checkout started. This demo stops here.";
+  if(!RS.email){$("#msg").textContent="Sign in with your email first so we can link this order to your account.";return}
+  $("#msg").textContent="Order placed. This demo stops here.";
+  RS.cart={};setTimeout(render,0);
 });
 
-try{const s=sessionStorage.getItem("rs_email");if(s){email=s;$("#email").value=s;$("#msg").textContent="Signed in as "+s+"."}}catch(_){}
+// Consent: remember the choice for this browser and hide the banner.
+function hideBanner(choice){try{localStorage.setItem("rs_consent",choice)}catch(_){}$("#consent").hidden=true}
+$("#opt-in").addEventListener("click",()=>hideBanner("in"));
+$("#opt-out").addEventListener("click",()=>hideBanner("out"));
+try{const c=localStorage.getItem("rs_consent");if(c){$("#consent").hidden=true;setTimeout(()=>$(c==="in"?"#opt-in":"#opt-out").click(),0)}}catch(_){}
+
+try{const s=sessionStorage.getItem("rs_email");if(s){RS.email=s;$("#email").value=s;$("#msg").textContent="Signed in as "+s+"."}}catch(_){}
 render();
-track("page_view",{page:location.pathname||"/"});
-setTimeout(()=>{$("#sdk").textContent=window.SalesforceInteractions?"Data 360 Web SDK detected.":"Web SDK not loaded yet. Events are logged here only."},800);
+setTimeout(()=>{$("#sdk").textContent=window.SalesforceInteractions?"Data 360 Web SDK detected.":"Web SDK not loaded yet, so no events are being sent."},1200);
 </script>
 </body>
 </html>
